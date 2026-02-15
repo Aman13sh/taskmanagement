@@ -25,6 +25,7 @@ import { TaskCard } from './TaskCard';
 import { AddColumnButton } from './AddColumnButton';
 import { AddMemberModal } from '../projects/AddMemberModal';
 import { FilterBar } from './FilterBar';
+import { TaskDetailModal } from './TaskDetailModal';
 
 interface ActiveDragItem {
   id: string;
@@ -46,12 +47,15 @@ export const KanbanBoard: React.FC = () => {
   const [activeItem, setActiveItem] = useState<ActiveDragItem | null>(null);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [filters, setFilters] = useState<any>({});
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Sensors for drag and drop
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 3, // Reduced for better responsiveness
+        delay: 0,
+        tolerance: 5,
       },
     })
   );
@@ -70,7 +74,7 @@ export const KanbanBoard: React.FC = () => {
           dispatch(fetchColumnsByProject(projectId)),
           dispatch(fetchTasksByProject(projectId)),
         ]);
-      } catch (error) {
+      } catch {
         toast.error('Failed to load board data');
         navigate('/projects');
       }
@@ -245,7 +249,12 @@ export const KanbanBoard: React.FC = () => {
             targetColumnId,
             targetPosition,
           })).unwrap();
-        } catch (error) {
+
+          // Refresh tasks to ensure all orders are correct
+          if (projectId) {
+            dispatch(fetchTasksByProject(projectId));
+          }
+        } catch {
           toast.error('Failed to move task');
         }
       }
@@ -265,7 +274,7 @@ export const KanbanBoard: React.FC = () => {
         project: projectId,
       })).unwrap();
       toast.success('Column created successfully');
-    } catch (error) {
+    } catch {
       toast.error('Failed to create column');
     }
   };
@@ -357,6 +366,7 @@ export const KanbanBoard: React.FC = () => {
                   key={column._id}
                   column={column}
                   tasks={getTasksByColumn(column._id)}
+                  onTaskSelect={setSelectedTaskId}
                 />
               ))}
             </SortableContext>
@@ -381,6 +391,25 @@ export const KanbanBoard: React.FC = () => {
           projectName={currentProject?.name || 'Project'}
           onClose={() => setShowAddMemberModal(false)}
         />
+      )}
+
+      {/* Task Detail Modal - AT ROOT LEVEL */}
+      {selectedTaskId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ zIndex: 99999 }}
+        >
+          <div
+            className="absolute inset-0 bg-black opacity-50"
+            onClick={() => setSelectedTaskId(null)}
+          />
+          <div className="relative bg-white rounded-lg p-4 max-w-4xl max-h-[90vh] overflow-auto z-10">
+            <TaskDetailModal
+              taskId={selectedTaskId}
+              onClose={() => setSelectedTaskId(null)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

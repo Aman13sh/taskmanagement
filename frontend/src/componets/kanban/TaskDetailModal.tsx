@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../redux/hooks';
-import { updateTask, addTaskComment, deleteTaskComment, fetchTaskById } from '../../redux/slices/taskSlice';
+import { updateTask, addTaskComment, deleteTaskComment } from '../../redux/slices/taskSlice';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 
@@ -11,10 +11,12 @@ interface TaskDetailModalProps {
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClose }) => {
   const dispatch = useAppDispatch();
-  const { selectedTask, isLoading } = useAppSelector((state) => state.tasks);
+  const { tasks } = useAppSelector((state) => state.tasks);
   const { currentProject } = useAppSelector((state) => state.projects);
   const { user } = useAppSelector((state) => state.auth);
 
+  // Find task from existing tasks instead of fetching again
+  const selectedTask = tasks.find(t => t._id === taskId);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState({
     title: '',
@@ -29,18 +31,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
   const [newLabel, setNewLabel] = useState('');
 
   useEffect(() => {
-    dispatch(fetchTaskById(taskId));
-  }, [dispatch, taskId]);
-
-  useEffect(() => {
     if (selectedTask) {
       setEditedTask({
         title: selectedTask.title,
         description: selectedTask.description || '',
         priority: selectedTask.priority || 'medium',
         status: selectedTask.status || 'todo',
-        dueDate: selectedTask.dueDate ? format(new Date(selectedTask.dueDate), 'yyyy-MM-dd') : '',
-        assignedTo: selectedTask.assignedTo?.map(u => u._id) || [],
+        dueDate: selectedTask.dueDate && !isNaN(Date.parse(selectedTask.dueDate))
+          ? format(new Date(selectedTask.dueDate), 'yyyy-MM-dd')
+          : '',
+        assignedTo: selectedTask.assignedTo?.map(u => typeof u === 'string' ? u : u._id) || [],
         labels: selectedTask.labels || [],
       });
     }
@@ -145,38 +145,53 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
     }
   };
 
-  if (!selectedTask || isLoading) {
+  if (!selectedTask) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
+      <div className="p-6 text-center">
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">Task Not Found</h3>
+        <p className="text-gray-600 mb-4">The task could not be loaded. It may have been deleted.</p>
+        <button
+          onClick={onClose}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Close
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="border-b px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 flex-1">
             {isEditing ? (
               <input
                 type="text"
                 value={editedTask.title}
                 onChange={(e) => setEditedTask({ ...editedTask, title: e.target.value })}
-                className="text-xl font-bold border-b-2 border-blue-500 focus:outline-none"
+                className="text-xl font-bold border-b-2 border-blue-500 focus:outline-none flex-1"
+                placeholder="Task title..."
               />
             ) : (
               <h2 className="text-xl font-bold">{selectedTask.title}</h2>
             )}
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {!isEditing && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+              >
+                Edit Task
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -273,7 +288,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
                         <span className="font-medium">{comment.user?.name || 'Unknown'}</span>
                         <div className="flex items-center space-x-2">
                           <span className="text-xs text-gray-500">
-                            {format(new Date(comment.createdAt), 'MMM dd, yyyy HH:mm')}
+                            {comment.createdAt && !isNaN(Date.parse(comment.createdAt))
+                              ? format(new Date(comment.createdAt), 'MMM dd, yyyy HH:mm')
+                              : 'Unknown time'}
                           </span>
                           {comment.user?._id === user?.id && (
                             <button
@@ -313,7 +330,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
                           </span>
                         )}
                         <span className="text-gray-500 ml-2">
-                          {format(new Date(activity.timestamp), 'MMM dd, HH:mm')}
+                          {activity.timestamp && !isNaN(Date.parse(activity.timestamp))
+                            ? format(new Date(activity.timestamp), 'MMM dd, HH:mm')
+                            : 'Unknown time'}
                         </span>
                       </div>
                     </div>
@@ -379,7 +398,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
                 ) : (
                   <p className="text-sm">
                     {selectedTask.dueDate
-                      ? format(new Date(selectedTask.dueDate), 'MMM dd, yyyy')
+                      ? (selectedTask.dueDate && !isNaN(Date.parse(selectedTask.dueDate))
+                        ? format(new Date(selectedTask.dueDate), 'MMM dd, yyyy')
+                        : 'Invalid date')
                       : 'No due date'}
                   </p>
                 )}
@@ -389,18 +410,35 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
               <div>
                 <label className="block text-sm font-semibold mb-2">Assigned To</label>
                 {isEditing ? (
-                  <div className="space-y-2">
-                    {currentProject?.members.map((member) => (
-                      <label key={member.user} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={editedTask.assignedTo.includes(member.user)}
-                          onChange={() => handleAssignUser(member.user)}
-                          className="rounded"
-                        />
-                        <span className="text-sm">{member.user}</span>
-                      </label>
-                    ))}
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {currentProject?.members.map((member) => {
+                      const userId = typeof member.user === 'object' ? member.user._id : member.user;
+                      const userName = typeof member.user === 'object' && member.user.name
+                        ? member.user.name
+                        : 'User';
+                      const userEmail = typeof member.user === 'object' && member.user.email
+                        ? member.user.email
+                        : '';
+
+                      return (
+                        <label key={userId} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                          <input
+                            type="checkbox"
+                            checked={editedTask.assignedTo.includes(userId)}
+                            onChange={() => handleAssignUser(userId)}
+                            className="rounded text-blue-600"
+                          />
+                          <div className="text-sm">
+                            <span className="font-medium">{userName}</span>
+                            {userEmail && <span className="text-gray-500 ml-1">({userEmail})</span>}
+                            <span className="text-xs text-gray-400 ml-2">{member.role}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {!currentProject?.members || currentProject.members.length === 0 && (
+                      <p className="text-sm text-gray-500">No members available</p>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-1">
@@ -418,8 +456,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
               {/* Created Info */}
               <div className="text-xs text-gray-500 pt-4 border-t">
                 <p>Created by: {selectedTask.createdBy?.name || 'Unknown'}</p>
-                <p>Created: {format(new Date(selectedTask.createdAt), 'MMM dd, yyyy HH:mm')}</p>
-                <p>Updated: {format(new Date(selectedTask.updatedAt), 'MMM dd, yyyy HH:mm')}</p>
+                <p>
+                  Created: {selectedTask.createdAt && !isNaN(Date.parse(selectedTask.createdAt))
+                    ? format(new Date(selectedTask.createdAt), 'MMM dd, yyyy HH:mm')
+                    : 'Unknown'}
+                </p>
+                <p>
+                  Updated: {selectedTask.updatedAt && !isNaN(Date.parse(selectedTask.updatedAt))
+                    ? format(new Date(selectedTask.updatedAt), 'MMM dd, yyyy HH:mm')
+                    : 'Unknown'}
+                </p>
               </div>
             </div>
           </div>
@@ -452,6 +498,5 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
           )}
         </div>
       </div>
-    </div>
   );
 };

@@ -32,9 +32,10 @@ interface Task {
 interface KanbanColumnProps {
   column: Column;
   tasks: Task[];
+  onTaskSelect?: (taskId: string) => void;
 }
 
-export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks }) => {
+export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks, onTaskSelect }) => {
   const dispatch = useAppDispatch();
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -93,13 +94,18 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks }) => 
     }
   };
 
-  const handleAddTask = async (title: string, description?: string) => {
+  const handleAddTask = async (taskData: any) => {
     try {
       await dispatch(createTask({
-        title,
-        description,
+        title: taskData.title,
+        description: taskData.description,
         project: column.project,
         column: column._id,
+        priority: taskData.priority,
+        status: taskData.status,
+        dueDate: taskData.dueDate,
+        assignedTo: taskData.assignedTo,
+        labels: taskData.labels,
       })).unwrap();
       toast.success('Task created');
       setIsAddingTask(false);
@@ -192,6 +198,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks }) => 
         <AddTaskForm
           onAdd={handleAddTask}
           onCancel={() => setIsAddingTask(false)}
+          columnId={column._id}
         />
       )}
 
@@ -202,7 +209,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ column, tasks }) => 
           strategy={verticalListSortingStrategy}
         >
           {tasks.map((task) => (
-            <TaskCard key={task._id} task={task} />
+            <TaskCard key={task._id} task={task} onSelect={onTaskSelect} />
           ))}
         </SortableContext>
       </div>

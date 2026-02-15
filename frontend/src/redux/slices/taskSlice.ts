@@ -167,16 +167,13 @@ export const moveTask = createAsyncThunk(
   'tasks/move',
   async ({ taskId, targetColumnId, targetPosition }: MoveTaskData, { rejectWithValue }) => {
     try {
-      await api.patch(
+      const response = await api.patch(
         `/board/tasks/${taskId}/move`,
         { newColumnId: targetColumnId, newOrder: targetPosition }
       );
 
-      // The backend only returns a success message, so we'll return the data we need
-      return {
-        task: { _id: taskId, column: targetColumnId, order: targetPosition } as Task,
-        affectedTasks: [] as Task[]
-      };
+      // Backend now returns the full task with populated fields
+      return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to move task');
     }
@@ -331,21 +328,18 @@ const taskSlice = createSlice({
     // Move task
     builder
       .addCase(moveTask.fulfilled, (state, action) => {
-        const { task, affectedTasks } = action.payload;
+        const task = action.payload;
 
-        // Update the moved task
+        // Update the moved task with full data
         const taskIndex = state.tasks.findIndex(t => t._id === task._id);
         if (taskIndex !== -1) {
           state.tasks[taskIndex] = task;
         }
 
-        // Update all affected tasks (reordered tasks)
-        affectedTasks.forEach(affectedTask => {
-          const index = state.tasks.findIndex(t => t._id === affectedTask._id);
-          if (index !== -1) {
-            state.tasks[index] = affectedTask;
-          }
-        });
+        // If this is the selected task, update it too
+        if (state.selectedTask?._id === task._id) {
+          state.selectedTask = task;
+        }
 
         state.error = null;
       })

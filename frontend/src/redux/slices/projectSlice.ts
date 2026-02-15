@@ -3,8 +3,14 @@ import type { PayloadAction } from '@reduxjs/toolkit';
 import api from '../../api/api';
 
 // Types
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+}
+
 interface ProjectMember {
-  user: string;
+  user: string | User;
   role: 'owner' | 'admin' | 'member' | 'viewer';
 }
 
@@ -54,7 +60,7 @@ export const fetchProjects = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await api.get('/projects');
-      return response.data.projects;
+      return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch projects');
     }
@@ -66,7 +72,7 @@ export const fetchProjectById = createAsyncThunk(
   async (projectId: string, { rejectWithValue }) => {
     try {
       const response = await api.get(`/projects/${projectId}`);
-      return response.data.project;
+      return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch project');
     }

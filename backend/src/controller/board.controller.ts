@@ -56,6 +56,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
       columnId,
       order,
       priority,
+      status,
       dueDate,
       assignedTo,
       labels
@@ -69,7 +70,7 @@ export const createTask = async (req: AuthRequest, res: Response) => {
       project: projectId,
       column: columnId,
       order,
-      status: "todo",
+      status: status || "todo",
       priority: priority || "medium",
       dueDate: dueDate ? new Date(dueDate) : undefined,
       assignedTo: assignedTo || [],
@@ -98,21 +99,78 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 };
 
 export const moveTask = async (req: Request, res: Response) => {
-  const { taskId } = req.params;
-  const { newColumnId, newOrder } = req.body;
+  try {
+    const { taskId } = req.params;
+    const { newColumnId, newOrder } = req.body;
 
-  const task = await Task.findById(taskId);
+    const task = await Task.findById(taskId);
 
-  if (!task) {
-    return res.status(404).json({ message: "Task not found" });
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    const oldColumnId = task.column;
+    const oldOrder = task.order;
+
+    // If moving within the same column
+    if (oldColumnId.toString() === newColumnId.toString()) {
+      // Reorder tasks in the same column
+      if (oldOrder < newOrder) {
+        // Moving down: decrease order of tasks between old and new position
+        await Task.updateMany(
+          {
+            column: newColumnId,
+            order: { $gt: oldOrder, $lte: newOrder }
+          },
+          { $inc: { order: -1 } }
+        );
+      } else if (oldOrder > newOrder) {
+        // Moving up: increase order of tasks between new and old position
+        await Task.updateMany(
+          {
+            column: newColumnId,
+            order: { $gte: newOrder, $lt: oldOrder }
+          },
+          { $inc: { order: 1 } }
+        );
+      }
+    } else {
+      // Moving to different column
+      // Decrease order of tasks after the moved task in the old column
+      await Task.updateMany(
+        {
+          column: oldColumnId,
+          order: { $gt: oldOrder }
+        },
+        { $inc: { order: -1 } }
+      );
+
+      // Increase order of tasks at or after the target position in the new column
+      await Task.updateMany(
+        {
+          column: newColumnId,
+          order: { $gte: newOrder }
+        },
+        { $inc: { order: 1 } }
+      );
+    }
+
+    // Update the task itself
+    task.column = newColumnId;
+    task.order = newOrder;
+    await task.save();
+
+    // Populate and return the full task
+    await task.populate([
+      { path: "assignedTo", select: "name email" },
+      { path: "createdBy", select: "name email" }
+    ]);
+
+    res.json(task);
+  } catch (error) {
+    console.error("Error moving task:", error);
+    res.status(500).json({ message: "Failed to move task" });
   }
-
-  task.column = newColumnId;
-  task.order = newOrder;
-
-  await task.save();
-
-  res.json({ message: "Task moved successfully" });
 };
 
 export const deleteTask = async (req: Request, res: Response) => {
